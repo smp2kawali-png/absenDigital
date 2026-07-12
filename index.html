@@ -1113,7 +1113,57 @@ Kembali
     // Shim supaya semua pemanggilan google.script.run.withSuccessHandler(...).namaFungsi(...)
     // yang sudah ada di kode ini TETAP JALAN tanpa diubah, walau halaman ini
     // sekarang di-host di luar Apps Script (bukan lagi di dalam iframe Google).
+    //
+    // Dipakai teknik JSONP (memuat data lewat tag <script>), BUKAN fetch(),
+    // karena fetch() ke Apps Script dari domain lain sering diblokir CORS
+    // (Apps Script tidak mendukung permintaan "preflight" OPTIONS). Tag
+    // <script> tidak tunduk pada aturan CORS, jadi jauh lebih stabil.
     (function setupGoogleScriptRunShim() {
+        let jsonpCounter = 0;
+
+        function callApiJsonp(fn, args, onSuccess, onFailure) {
+            const callbackName = "__gasCb_" + (jsonpCounter++) + "_" + Date.now();
+            let done = false;
+
+            const script = document.createElement("script");
+
+            function cleanup() {
+                if (done) return;
+                done = true;
+                clearTimeout(timeoutId);
+                delete window[callbackName];
+                if (script.parentNode) script.parentNode.removeChild(script);
+            }
+
+            const timeoutId = setTimeout(() => {
+                cleanup();
+                if (onFailure) onFailure(new Error("Waktu koneksi ke server habis. Cek koneksi internet lalu coba lagi."));
+            }, 20000);
+
+            window[callbackName] = function (data) {
+                cleanup();
+                if (data && data.error) {
+                    if (onFailure) onFailure(new Error(data.error));
+                    else console.error("Server error:", data.error);
+                } else {
+                    if (onSuccess) onSuccess(data ? data.result : undefined);
+                }
+            };
+
+            script.onerror = function () {
+                cleanup();
+                if (onFailure) onFailure(new Error("Gagal terhubung ke server (periksa URL Apps Script / koneksi internet)."));
+            };
+
+            script.src = APPS_SCRIPT_URL
+                + "?fn=" + encodeURIComponent(fn)
+                + "&args=" + encodeURIComponent(JSON.stringify(args))
+                + "&callback=" + encodeURIComponent(callbackName)
+                + "&_=" + Date.now(); // cache-buster
+
+            document.body.appendChild(script);
+        }
+
         function createRunProxy() {
             let onSuccess = null;
             let onFailure = null;
@@ -1131,26 +1181,7 @@ Kembali
 
                     // prop = nama fungsi backend yang ingin dipanggil, mis. "scanAbsensi"
                     return function (...args) {
-                        fetch(APPS_SCRIPT_URL, {
-                            method: "POST",
-                            // text/plain sengaja dipakai supaya browser TIDAK melakukan
-                            // CORS preflight (OPTIONS), karena Apps Script tidak menangani OPTIONS.
-                            headers: { "Content-Type": "text/plain;charset=utf-8" },
-                            body: JSON.stringify({ fn: prop, args })
-                        })
-                            .then(res => res.json())
-                            .then(data => {
-                                if (data && data.error) {
-                                    if (onFailure) onFailure(new Error(data.error));
-                                    else console.error("Server error:", data.error);
-                                } else {
-                                    if (onSuccess) onSuccess(data ? data.result : undefined);
-                                }
-                            })
-                            .catch(err => {
-                                if (onFailure) onFailure(err);
-                                else console.error("Fetch error:", err);
-                            });
+                        callApiJsonp(prop, args, onSuccess, onFailure);
                     };
                 }
             });
