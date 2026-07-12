@@ -1117,14 +1117,15 @@ Kembali
         function createRunProxy() {
             let onSuccess = null;
             let onFailure = null;
+            let proxyRef; // diisi setelah proxy dibuat, supaya method chaining tetap lewat get trap
 
             const handle = {
-                withSuccessHandler(fn) { onSuccess = fn; return handle; },
-                withFailureHandler(fn) { onFailure = fn; return handle; },
-                withUserObject() { return handle; } // tidak dipakai, sekadar kompatibilitas
+                withSuccessHandler(fn) { onSuccess = fn; return proxyRef; },
+                withFailureHandler(fn) { onFailure = fn; return proxyRef; },
+                withUserObject() { return proxyRef; } // tidak dipakai, sekadar kompatibilitas
             };
 
-            return new Proxy(handle, {
+            proxyRef = new Proxy(handle, {
                 get(target, prop) {
                     if (prop in target) return target[prop];
 
@@ -1153,6 +1154,8 @@ Kembali
                     };
                 }
             });
+
+            return proxyRef;
         }
 
         window.google = window.google || {};
@@ -3193,8 +3196,24 @@ function onScanSuccess(decodedText) {
     }
 
     // --- MODALS ---
-    function showLoading() { document.getElementById('loadingOverlay').classList.remove('hidden'); }
-    function hideLoading() { document.getElementById('loadingOverlay').classList.add('hidden'); }
+    let loadingSafetyTimer = null;
+    function showLoading() {
+        document.getElementById('loadingOverlay').classList.remove('hidden');
+        clearTimeout(loadingSafetyTimer);
+        // Jaring pengaman: kalau karena satu-dua hal loading nyangkut > 15 detik
+        // (mis. koneksi ke server gagal tanpa terdeteksi), sembunyikan otomatis
+        // supaya pengguna tidak terjebak melihat layar loading selamanya.
+        loadingSafetyTimer = setTimeout(() => {
+            hideLoading();
+            console.warn("Loading dipaksa berhenti setelah 15 detik (kemungkinan koneksi ke server gagal).");
+        }, 15000);
+    }
+    function hideLoading() {
+        document.getElementById('loadingOverlay').classList.add('hidden');
+        clearTimeout(loadingSafetyTimer);
+    }
+    window.addEventListener('error', e => console.error('Unhandled error:', e.message, e.error));
+    window.addEventListener('unhandledrejection', e => console.error('Unhandled promise rejection:', e.reason));
 
     function showModal(content) {
         const container = document.getElementById('modalContainer');
