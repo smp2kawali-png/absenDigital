@@ -753,6 +753,51 @@ style="background-image:url('https://lh3.googleusercontent.com/d/1gMq-hlGjei91sF
                   </form>
               </div>
           </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mt-6">
+          <div class="p-5 border-b border-gray-100 bg-red-50/50">
+              <h3 class="font-bold text-gray-800 flex items-center">
+                  <i class="fas fa-user-clock text-red-500 mr-2"></i> Alfa Otomatis Harian
+              </h3>
+              <p class="text-xs text-gray-500 mt-1">Siswa yang tidak absen otomatis ditandai Alpa.</p>
+          </div>
+          <div class="p-5">
+              <form onsubmit="saveAutoAlfaConfig(event)">
+                  <div class="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-100 mb-4">
+                      <div>
+                          <p class="text-xs font-bold text-gray-700">Aktifkan Otomatis</p>
+                          <p class="text-[10px] text-gray-400" id="statusAutoAlfaText">Nonaktif</p>
+                      </div>
+                      <label class="relative inline-flex items-center cursor-pointer">
+                          <input type="checkbox" id="conf_auto_alfa_aktif" class="sr-only peer">
+                          <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
+                      </label>
+                  </div>
+
+                  <div class="mb-4">
+                      <label class="block text-xs font-bold text-gray-700 mb-1">Jam Proses (setelah jam pulang)</label>
+                      <input type="time" id="conf_jam_proses_alfa" name="jam_proses_alfa" class="w-full border-gray-300 rounded-lg text-xs p-2 focus:ring-red-500 focus:border-red-500">
+                  </div>
+
+                  <div class="flex gap-4 mb-4">
+                      <label class="flex items-center gap-2 text-xs text-gray-600">
+                          <input type="checkbox" id="conf_libur_sabtu" class="rounded text-red-500 focus:ring-red-500"> Sabtu libur
+                      </label>
+                      <label class="flex items-center gap-2 text-xs text-gray-600">
+                          <input type="checkbox" id="conf_libur_minggu" class="rounded text-red-500 focus:ring-red-500"> Minggu libur
+                      </label>
+                  </div>
+
+                  <button type="submit" id="btnSaveAutoAlfa" class="w-full bg-red-500 text-white py-2.5 rounded-lg text-sm font-bold shadow-md hover:bg-red-600 transition transform active:scale-95 flex items-center justify-center gap-2 mb-2">
+                      <i class="fas fa-save"></i> Simpan Pengaturan Alfa
+                  </button>
+                  <button type="button" onclick="runAutoAlfaNow()" id="btnRunAlfaNow" class="w-full bg-white border border-red-200 text-red-600 py-2 rounded-lg text-xs font-bold hover:bg-red-50 transition flex items-center justify-center gap-2">
+                      <i class="fas fa-bolt"></i> Proses Alfa Sekarang (Manual)
+                  </button>
+                  <p class="text-[10px] text-gray-400 mt-2"><i class="fas fa-info-circle"></i> Otomatis melewati tanggal di "Daftar Hari Libur" di sebelah kanan.</p>
+              </form>
+          </div>
+      </div>
       </div>
 
       <div class="lg:col-span-2">
@@ -2037,8 +2082,92 @@ function loadGuruDashboard() {
                 document.getElementById('conf_masuk_akhir').value = conf.jam_masuk_akhir;
                 document.getElementById('conf_pulang_mulai').value = conf.jam_pulang_mulai;
                 document.getElementById('conf_pulang_akhir').value = conf.jam_pulang_akhir;
+
+                document.getElementById('conf_jam_proses_alfa').value = conf.jam_proses_alfa || '17:30';
+                document.getElementById('conf_libur_sabtu').checked = conf.libur_sabtu === 'ya';
+                document.getElementById('conf_libur_minggu').checked = (conf.libur_minggu || 'ya') === 'ya';
+
+                const aktif = conf.auto_alfa_aktif === 'ya';
+                document.getElementById('conf_auto_alfa_aktif').checked = aktif;
+                document.getElementById('statusAutoAlfaText').textContent =
+                    aktif ? ('Aktif, berjalan tiap hari jam ' + (conf.jam_proses_alfa || '17:30')) : 'Nonaktif';
             }
         }).getAppConfig();
+    }
+
+    function saveAutoAlfaConfig(e) {
+        e.preventDefault();
+        const btn = document.getElementById('btnSaveAutoAlfa');
+        const originalText = btn.innerHTML;
+
+        const aktif = document.getElementById('conf_auto_alfa_aktif').checked;
+        const jamProses = document.getElementById('conf_jam_proses_alfa').value || '17:30';
+        const liburSabtu = document.getElementById('conf_libur_sabtu').checked;
+        const liburMinggu = document.getElementById('conf_libur_minggu').checked;
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Menyimpan...';
+
+        google.script.run.withSuccessHandler(res => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            if (res.success) {
+                showAlert('success', aktif
+                    ? 'Alfa otomatis diaktifkan, akan berjalan tiap hari jam ' + jamProses + '.'
+                    : 'Alfa otomatis dinonaktifkan.');
+                document.getElementById('statusAutoAlfaText').textContent =
+                    aktif ? ('Aktif, berjalan tiap hari jam ' + jamProses) : 'Nonaktif';
+            } else {
+                showAlert('error', res.message);
+            }
+        }).withFailureHandler(err => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            showAlert('error', 'Gagal koneksi: ' + err);
+        }).saveAppConfig({
+            // Kirim juga jam absen masuk/pulang yang sedang ditampilkan supaya tidak tertimpa kosong
+            jam_masuk_mulai: document.getElementById('conf_masuk_mulai').value,
+            jam_masuk_akhir: document.getElementById('conf_masuk_akhir').value,
+            jam_pulang_mulai: document.getElementById('conf_pulang_mulai').value,
+            jam_pulang_akhir: document.getElementById('conf_pulang_akhir').value,
+            jam_proses_alfa: jamProses,
+            libur_sabtu: liburSabtu ? 'ya' : 'tidak',
+            libur_minggu: liburMinggu ? 'ya' : 'tidak',
+            auto_alfa_aktif: aktif ? 'ya' : 'tidak'
+        });
+    }
+
+    function runAutoAlfaNow() {
+        Swal.fire({
+            icon: 'question',
+            title: 'Proses Alfa Sekarang?',
+            text: 'Semua siswa yang hari ini belum absen (dan belum di-set manual) akan langsung ditandai Alpa.',
+            showCancelButton: true,
+            confirmButtonText: 'Ya, Proses',
+            cancelButtonText: 'Batal',
+            confirmButtonColor: '#ef4444'
+        }).then(result => {
+            if (!result.isConfirmed) return;
+
+            const btn = document.getElementById('btnRunAlfaNow');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Memproses...';
+
+            google.script.run.withSuccessHandler(res => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+                if (res.success) {
+                    showAlert('success', res.message);
+                } else {
+                    showAlert('error', res.message);
+                }
+            }).withFailureHandler(err => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+                showAlert('error', 'Gagal koneksi: ' + err);
+            }).processAutoAlfaManual(currentUser ? currentUser.token : null);
+        });
     }
 
     function saveGlobalConfig(e) {
