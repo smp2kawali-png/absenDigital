@@ -851,6 +851,89 @@ style="background-image:url('https://lh3.googleusercontent.com/d/1gMq-hlGjei91sF
   </div>
 </div>
 
+<div id="view-izin-sakit" class="view-section animate-fade-in">
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <div class="lg:col-span-1">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden sticky top-24">
+              <div class="p-5 border-b border-gray-100 bg-indigo-50/50">
+                  <h3 class="font-bold text-gray-800 flex items-center">
+                      <i class="fas fa-notes-medical text-indigo-600 mr-2"></i> Ajukan Izin / Sakit
+                  </h3>
+                  <p class="text-xs text-gray-500 mt-1">Bisa untuk beberapa hari sekaligus.</p>
+              </div>
+              <div class="p-5">
+                  <form onsubmit="handleSubmitIzinSakit(event)">
+                      <div class="mb-4">
+                          <label class="block text-xs font-bold text-gray-700 mb-1">Siswa</label>
+                          <select id="izin_nisn" required class="w-full border-gray-300 rounded-lg text-sm p-2.5 focus:ring-indigo-500 focus:border-indigo-500">
+                              <option value="">-- Pilih Siswa --</option>
+                          </select>
+                      </div>
+
+                      <div class="mb-4">
+                          <label class="block text-xs font-bold text-gray-700 mb-1">Status</label>
+                          <div class="flex gap-3">
+                              <label class="flex-1 flex items-center justify-center gap-2 border border-gray-300 rounded-lg p-2.5 cursor-pointer text-sm font-medium has-[:checked]:bg-amber-50 has-[:checked]:border-amber-400 has-[:checked]:text-amber-700">
+                                  <input type="radio" name="izin_status" value="Sakit" required class="text-amber-500"> Sakit
+                              </label>
+                              <label class="flex-1 flex items-center justify-center gap-2 border border-gray-300 rounded-lg p-2.5 cursor-pointer text-sm font-medium has-[:checked]:bg-blue-50 has-[:checked]:border-blue-400 has-[:checked]:text-blue-700">
+                                  <input type="radio" name="izin_status" value="Izin" required class="text-blue-500"> Izin
+                              </label>
+                          </div>
+                      </div>
+
+                      <div class="grid grid-cols-2 gap-3 mb-4">
+                          <div>
+                              <label class="block text-xs font-bold text-gray-700 mb-1">Tanggal Mulai</label>
+                              <input type="date" id="izin_tgl_mulai" required class="w-full border-gray-300 rounded-lg text-sm p-2.5">
+                          </div>
+                          <div>
+                              <label class="block text-xs font-bold text-gray-700 mb-1">Tanggal Selesai</label>
+                              <input type="date" id="izin_tgl_selesai" required class="w-full border-gray-300 rounded-lg text-sm p-2.5">
+                          </div>
+                      </div>
+                      <p class="text-[10px] text-gray-400 mb-4 -mt-2"><i class="fas fa-info-circle"></i> Untuk 1 hari saja, isi tanggal mulai & selesai sama. Hari libur/akhir pekan di rentang ini otomatis dilewati.</p>
+
+                      <div class="mb-4">
+                          <label class="block text-xs font-bold text-gray-700 mb-1">Alasan / Keterangan</label>
+                          <textarea id="izin_alasan" required rows="3" placeholder="Contoh: Demam sejak kemarin, sudah dibawa ke dokter." class="w-full border-gray-300 rounded-lg text-sm p-2.5"></textarea>
+                      </div>
+
+                      <button type="submit" id="btnSubmitIzin" class="w-full bg-indigo-600 text-white py-2.5 rounded-lg text-sm font-bold shadow-md hover:bg-indigo-700 transition transform active:scale-95 flex items-center justify-center gap-2">
+                          <i class="fas fa-paper-plane"></i> Ajukan
+                      </button>
+                  </form>
+              </div>
+          </div>
+      </div>
+
+      <div class="lg:col-span-2">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div class="p-5 border-b border-gray-100 bg-gray-50/30">
+                  <h3 class="font-bold text-gray-800">Riwayat Pengajuan</h3>
+                  <p class="text-xs text-gray-500 mt-1">Daftar pengajuan Izin/Sakit yang sudah tercatat.</p>
+              </div>
+              <div class="overflow-x-auto">
+                  <table class="w-full text-left">
+                      <thead class="bg-gray-50 text-gray-500 text-[10px] uppercase font-semibold">
+                          <tr>
+                              <th class="p-4">Siswa</th>
+                              <th class="p-4">Status</th>
+                              <th class="p-4">Periode</th>
+                              <th class="p-4">Alasan</th>
+                              <th class="p-4">Diajukan Oleh</th>
+                              <th class="p-4">Waktu</th>
+                          </tr>
+                      </thead>
+                      <tbody id="tbody-izin-sakit" class="divide-y divide-gray-50 text-sm"></tbody>
+                  </table>
+              </div>
+          </div>
+      </div>
+  </div>
+</div>
+
 <div id="view-monitoring" class="view-section animate-fade-in">
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         
@@ -1434,6 +1517,7 @@ function processTableData(type) {
             case 'view-data-siswa': title = "Direktori Siswa"; break;
             case 'view-data-guru': title = "Manajemen Guru"; break;
             case 'view-kelola-absen': title = "Kelola Hari Libur"; break; // JUDUL BARU
+            case 'view-izin-sakit': title = "Pengajuan Izin & Sakit"; break;
             case 'view-scanner': title = "Scan Absensi"; break;
             case 'view-monitoring': title = "Monitoring Realtime"; break;
             case 'view-rekap-absensi': title = "Laporan Kehadiran"; break;
@@ -1642,6 +1726,7 @@ function processTableData(type) {
             menuHTML += createItem('Data Siswa', 'fa-user-graduate', 'loadDataSiswa()');
             menuHTML += createItem('Data Guru', 'fa-chalkboard-teacher', 'loadDataGuru()');
             menuHTML += createItem('Laporan', 'fa-clipboard-list', 'loadRekapAbsensi()');
+            menuHTML += createItem('Izin & Sakit', 'fa-notes-medical', 'loadIzinSakit()');
             menuHTML += createItem('Kelola Absen', 'fa-calendar-times', 'loadKelolaAbsen()'); // MENU BARU
             menuHTML += createItem('Scan Absensi', 'fa-qrcode', 'loadScanAbsensi()');
             loadAdminDashboard();
@@ -1649,6 +1734,7 @@ function processTableData(type) {
         else if (currentUser.role === 'guru') {
             menuHTML += createItem('Dashboard', 'fa-home', 'loadGuruDashboard()', true);
             menuHTML += createItem('Monitoring', 'fa-eye', 'loadMonitoringAbsensi()');
+            menuHTML += createItem('Izin & Sakit', 'fa-notes-medical', 'loadIzinSakit()');
             menuHTML += createItem('Scan Absensi', 'fa-qrcode', 'loadScanAbsensi()');
             loadGuruDashboard();
         } 
@@ -2048,6 +2134,142 @@ function loadGuruDashboard() {
 
     // --- KELOLA HARI LIBUR (ADMIN) ---
 // --- KELOLA WAKTU & HARI LIBUR (ADMIN) ---
+    // ==========================================================================
+    // PENGAJUAN IZIN & SAKIT
+    // ==========================================================================
+    function loadIzinSakit() {
+        stopAndBack(false);
+        setActiveMenu('Izin & Sakit');
+        showView('view-izin-sakit');
+
+        // Set tanggal default = hari ini
+        const todayStr = new Date().toISOString().slice(0, 10);
+        document.getElementById('izin_tgl_mulai').value = todayStr;
+        document.getElementById('izin_tgl_selesai').value = todayStr;
+
+        populateIzinSiswaDropdown();
+        loadRiwayatIzinSakit();
+    }
+
+    function populateIzinSiswaDropdown() {
+        const select = document.getElementById('izin_nisn');
+
+        const render = (list) => {
+            const sorted = [...list].sort((a, b) => a.nama.localeCompare(b.nama));
+            select.innerHTML = '<option value="">-- Pilih Siswa --</option>' +
+                sorted.map(s => `<option value="${s.nisn}" data-nama="${s.nama}" data-kelas="${s.kelas}">${s.nama} — ${s.nisn} (${s.kelas})</option>`).join('');
+        };
+
+        if (tableState.siswa.fullData && tableState.siswa.fullData.length > 0) {
+            render(tableState.siswa.fullData);
+        } else {
+            select.innerHTML = '<option value="">Memuat data siswa...</option>';
+            google.script.run.withSuccessHandler(result => {
+                if (result.success) {
+                    tableState.siswa.fullData = result.data;
+                    render(result.data);
+                } else {
+                    select.innerHTML = '<option value="">Gagal memuat data siswa</option>';
+                }
+            }).getSiswaList();
+        }
+    }
+
+    function handleSubmitIzinSakit(e) {
+        e.preventDefault();
+
+        const select = document.getElementById('izin_nisn');
+        const opt = select.options[select.selectedIndex];
+        if (!select.value) { showAlert('error', 'Pilih siswa terlebih dahulu.'); return; }
+
+        const status = document.querySelector('input[name="izin_status"]:checked');
+        if (!status) { showAlert('error', 'Pilih status Sakit atau Izin.'); return; }
+
+        const tglMulai = document.getElementById('izin_tgl_mulai').value;
+        const tglSelesai = document.getElementById('izin_tgl_selesai').value;
+        const alasan = document.getElementById('izin_alasan').value.trim();
+
+        if (tglSelesai < tglMulai) { showAlert('error', 'Tanggal selesai tidak boleh sebelum tanggal mulai.'); return; }
+
+        const payload = {
+            nisn: select.value,
+            nama: opt.dataset.nama,
+            kelas: opt.dataset.kelas,
+            status: status.value,
+            tanggalMulai: tglMulai,
+            tanggalSelesai: tglSelesai,
+            alasan: alasan,
+            diajukanOleh: currentUser ? (currentUser.nama || currentUser.identifier) : '-'
+        };
+
+        const btn = document.getElementById('btnSubmitIzin');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Mengirim...';
+
+        google.script.run.withSuccessHandler(res => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            if (res.success) {
+                showAlert('success', res.message);
+                e.target.reset();
+                const todayStr = new Date().toISOString().slice(0, 10);
+                document.getElementById('izin_tgl_mulai').value = todayStr;
+                document.getElementById('izin_tgl_selesai').value = todayStr;
+                loadRiwayatIzinSakit();
+                // Refresh cache monitoring supaya dashboard ikut update kalau dibuka lagi
+                tableState.monitoring.fullData = [];
+            } else {
+                showAlert('error', res.message);
+            }
+        }).withFailureHandler(err => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            showAlert('error', 'Gagal koneksi: ' + err);
+        }).submitIzinSakit(currentUser ? currentUser.token : null, payload);
+    }
+
+    function loadRiwayatIzinSakit() {
+        const tbody = document.getElementById('tbody-izin-sakit');
+        tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-gray-500"><i class="fas fa-circle-notch fa-spin mr-2"></i>Memuat riwayat...</td></tr>';
+
+        const filterKelas = (currentUser && currentUser.role === 'guru') ? currentUser.kelas : null;
+
+        google.script.run.withSuccessHandler(res => {
+            if (!res.success) {
+                tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-red-500">Gagal memuat riwayat.</td></tr>';
+                return;
+            }
+            if (res.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-gray-400 italic">Belum ada pengajuan.</td></tr>';
+                return;
+            }
+
+            const badge = (s) => s === 'Sakit'
+                ? '<span class="px-2 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">Sakit</span>'
+                : '<span class="px-2 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">Izin</span>';
+
+            tbody.innerHTML = res.data.map(item => `
+                <tr class="hover:bg-gray-50">
+                    <td class="p-4">
+                        <div class="font-bold text-gray-800">${item.nama}</div>
+                        <div class="text-[11px] text-gray-400">${item.nisn} • ${item.kelas}</div>
+                    </td>
+                    <td class="p-4">${badge(item.status)}</td>
+                    <td class="p-4 text-xs">
+                        ${item.tanggalMulai}${item.tanggalMulai !== item.tanggalSelesai ? ' s/d ' + item.tanggalSelesai : ''}
+                        <div class="text-[10px] text-gray-400">${item.hariTercatat} hari tercatat${item.hariDilewati > 0 ? ', ' + item.hariDilewati + ' dilewati' : ''}</div>
+                    </td>
+                    <td class="p-4 text-xs text-gray-600 max-w-xs">${item.alasan}</td>
+                    <td class="p-4 text-xs text-gray-600">${item.diajukanOleh}</td>
+                    <td class="p-4 text-xs text-gray-400">${item.waktuDiajukan}</td>
+                </tr>
+            `).join('');
+        }).withFailureHandler(err => {
+            tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-red-500">Gagal koneksi: ' + err + '</td></tr>';
+        }).getRiwayatIzinSakit(filterKelas);
+    }
+
     function loadKelolaAbsen() {
         stopAndBack(false);
         setActiveMenu('Kelola Absen');
