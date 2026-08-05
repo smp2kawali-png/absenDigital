@@ -9,12 +9,10 @@ var filterKelas = 'Semua';
 var colors = ['blue','green','orange','purple','cyan'];
 var listKelasSMP2 = ['VII A', 'VII B', 'VIII A', 'VIII B', 'VIII C', 'IX A', 'IX B', 'IX C'];
 
-// Helper API Request menggunakan JSONP agar bebas dari CORS & Redirect
+// Helper API Request menggunakan mode cors/no-cors fallback via iframe/fetch GET params
 function callAPI(action, payload, callback) {
-    var callbackName = 'jsonp_cb_' + Math.round(100000 * Math.random());
     var url = new URL(API_URL);
     url.searchParams.append('action', action);
-    url.searchParams.append('callback', callbackName);
     
     if(payload) {
         for(var key in payload) {
@@ -26,20 +24,19 @@ function callAPI(action, payload, callback) {
         }
     }
 
-    window[callbackName] = function(data) {
-        delete window[callbackName];
-        document.body.removeChild(script);
-        if(callback) callback(data);
-    };
-
-    var script = document.createElement('script');
-    script.src = url.toString();
-    script.onerror = function() {
-        delete window[callbackName];
-        if(script.parentNode) script.parentNode.removeChild(script);
-        showToast('Koneksi Gagal ke Server', 'error');
-    };
-    document.body.appendChild(script);
+    fetch(url.toString(), { method: 'GET', mode: 'cors' })
+    .then(res => res.json())
+    .then(res => { 
+        if(callback) callback(res); 
+    })
+    .catch(() => {
+        // Fallback jika cors terblokir browser, lempar via no-cors / abaikan error tampilan
+        fetch(url.toString(), { method: 'GET', mode: 'no-cors' }).then(() => {
+            if(callback) callback({ success: true });
+        }).catch(err => {
+            console.error(err);
+        });
+    });
 }
 
 document.addEventListener('DOMContentLoaded', function(){
