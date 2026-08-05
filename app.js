@@ -9,7 +9,6 @@ var filterKelas = 'Semua';
 var colors = ['blue','green','orange','purple','cyan'];
 var listKelasSMP2 = ['VII A', 'VII B', 'VIII A', 'VIII B', 'VIII C', 'IX A', 'IX B', 'IX C'];
 
-// Helper API Request menggunakan mode cors/no-cors fallback via iframe/fetch GET params
 function callAPI(action, payload, callback) {
     var url = new URL(API_URL);
     url.searchParams.append('action', action);
@@ -30,7 +29,6 @@ function callAPI(action, payload, callback) {
         if(callback) callback(res); 
     })
     .catch(() => {
-        // Fallback jika cors terblokir browser, lempar via no-cors / abaikan error tampilan
         fetch(url.toString(), { method: 'GET', mode: 'no-cors' }).then(() => {
             if(callback) callback({ success: true });
         }).catch(err => {
@@ -214,39 +212,105 @@ function deleteSiswa(id) {
 function regFace(id, nm) {
     var m = document.getElementById('modal');
     if(!m) return;
-    m.innerHTML = `<div class="modal"><div class="modal-header"><span>Register Wajah - ${nm}</span><button class="modal-close" onclick="closeModal()">&times;</button></div><div class="modal-body"><input type="file" id="f-in" accept="image/*" onchange="processRegFace('${id}', this)"></div></div>`;
+    m.innerHTML = `
+        <div class="modal">
+            <div class="modal-header"><span>Register Wajah - ${nm}</span><button class="modal-close" onclick="closeModal()">&times;</button></div>
+            <div class="modal-body">
+                <div style="text-align:center;padding:20px;border:2px dashed var(--border);border-radius:12px;margin-bottom:15px;cursor:pointer" onclick="document.getElementById('foto-input').click()">
+                    <i data-lucide="upload" style="width:48px;height:48px;color:var(--gray);margin-bottom:10px"></i>
+                    <p style="color:var(--gray);font-size:13px">Klik untuk upload foto wajah</p>
+                    <input type="file" id="foto-input" accept="image/*" style="display:none" onchange="previewFoto(this, '${id}')">
+                </div>
+                <div id="preview-box" style="display:none;margin-bottom:15px;text-align:center">
+                    <img id="preview-img" style="width:100%;max-height:200px;object-fit:contain;border-radius:8px">
+                </div>
+                <div class="face-status loading" id="face-status" style="display:none">Memproses wajah...</div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal()">Batal</button>
+                <button class="btn btn-primary" id="save-btn" disabled onclick="executeRegisterFace('${id}')">Simpan Wajah</button>
+            </div>
+        </div>`;
     m.classList.add('active');
+    lucide.createIcons();
 }
 
-function processRegFace(id, input) {
+var uploadedImg = null;
+function previewFoto(input, id) {
     if(input.files && input.files[0]) {
         var reader = new FileReader();
         reader.onload = function(e) {
-            var img = new Image();
-            img.onload = function() {
-                Promise.all([
-                    faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model'),
-                    faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model'),
-                    faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model')
-                ]).then(() => {
-                    faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor().then(d => {
-                        if(d) {
-                            callAPI('registerFace', {data: JSON.stringify({studentId: id, faceDescriptor: Array.from(d.descriptor), fotoURL: e.target.result})}, function(r){
-                                if(r.success) { showToast('Wajah berhasil didaftarkan!', 'success'); closeModal(); loadAdminData(); }
-                            });
-                        } else { showToast('Wajah tidak terdeteksi', 'error'); }
-                    });
-                });
+            uploadedImg = new Image();
+            uploadedImg.onload = function() {
+                var prevBox = document.getElementById('preview-box');
+                var prevImg = document.getElementById('preview-img');
+                var saveBtn = document.getElementById('save-btn');
+                if(prevBox) prevBox.style.display = 'block';
+                if(prevImg) prevImg.src = e.target.result;
+                if(saveBtn) saveBtn.disabled = false;
             };
-            img.src = e.target.result;
+            uploadedImg.src = e.target.result;
         };
         reader.readAsDataURL(input.files[0]);
     }
 }
 
+function executeRegisterFace(id) {
+    if(!uploadedImg) { showToast('Pilih foto dulu', 'error'); return; }
+    var statusEl = document.getElementById('face-status');
+    var saveBtn = document.getElementById('save-btn');
+    if(statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.className = 'face-status loading';
+        statusEl.textContent = 'Mendeteksi wajah...';
+    }
+    if(saveBtn) saveBtn.disabled = true;
+
+    var cv = document.createElement('canvas');
+    cv.width = uploadedImg.width;
+    cv.height = uploadedImg.height;
+    cv.getContext('2d').drawImage(uploadedImg, 0, 0);
+
+    Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model'),
+        faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model'),
+        faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model')
+    ]).then(() => {
+        faceapi.detectSingleFace(cv, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor().then(d => {
+            if(d) {
+                var desc = Array.from(d.descriptor);
+                var small = document.createElement('canvas');
+                small.width = 200; small.height = 200;
+                small.getContext('2d').drawImage(uploadedImg, 0, 0, 200, 200);
+                var url = small.toDataURL('image/jpeg', 0.3);
+                
+                if(statusEl) statusEl.textContent = 'Menyimpan...';
+                callAPI('registerFace', {data: JSON.stringify({studentId: id, faceDescriptor: desc, fotoURL: url})}, function(r){
+                    closeModal();
+                    if(r.success) { showToast('Wajah berhasil didaftarkan!', 'success'); loadAdminData(); }
+                    else { showToast('Gagal menyimpan', 'error'); }
+                });
+            } else {
+                if(statusEl) {
+                    statusEl.className = 'face-status error';
+                    statusEl.textContent = 'Wajah tidak terdeteksi dalam foto';
+                }
+                if(saveBtn) saveBtn.disabled = false;
+            }
+        }).catch(e => {
+            if(statusEl) {
+                statusEl.className = 'face-status error';
+                statusEl.textContent = 'Error deteksi: ' + e.message;
+            }
+            if(saveBtn) saveBtn.disabled = false;
+        });
+    });
+}
+
 function closeModal() { 
     var m = document.getElementById('modal');
     if(m) m.classList.remove('active'); 
+    uploadedImg = null;
 }
 
 function saveSettings() {
