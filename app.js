@@ -15,24 +15,25 @@ function callAPI(action, payload, callback) {
     var url = new URL(API_URL);
     url.searchParams.append('action', action);
     
-    if(payload) {
+    if(payload && action !== 'registerFace' && action !== 'recordAttendance') {
         for(var key in payload) {
-            if(typeof payload[key] === 'object') {
-                url.searchParams.append(key, JSON.stringify(payload[key]));
-            } else {
-                url.searchParams.append(key, payload[key]);
-            }
+            url.searchParams.append(key, payload[key]);
         }
+        fetch(url.toString(), { method: 'GET' })
+        .then(res => res.json())
+        .then(res => { if(callback) callback(res); })
+        .catch(() => showToast('Koneksi Gagal', 'error'));
+    } else {
+        // Gunakan POST untuk data besar (Register Wajah / Absensi)
+        var bodyData = Object.assign({ action: action }, payload || {});
+        fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify(bodyData)
+        })
+        .then(res => res.json())
+        .then(res => { if(callback) callback(res); })
+        .catch(() => showToast('Koneksi Gagal', 'error'));
     }
-
-    fetch(url.toString(), { method: 'GET', mode: 'cors' })
-    .then(res => res.json())
-    .then(res => { if(callback) callback(res); })
-    .catch(() => {
-        fetch(url.toString(), { method: 'GET', mode: 'no-cors' }).then(() => {
-            if(callback) callback({ success: true });
-        }).catch(err => console.error(err));
-    });
 }
 
 document.addEventListener('DOMContentLoaded', function(){
@@ -203,7 +204,6 @@ function deleteSiswa(id) {
     }
 }
 
-// --- FITUR REGISTER WAJAH DENGAN KAMERA LANGSUNG & UPLOAD + TOMBOL SIMPAN ---
 function regFace(id, nm) {
     uploadedImgData = null;
     var m = document.getElementById('modal');
@@ -316,13 +316,11 @@ function saveRegisteredFace(id) {
         ]).then(() => {
             faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor().then(d => {
                 if(d) {
-                    if(statusEl) statusEl.textContent = 'Menyimpan ke Database...';
+                    if(statusEl) statusEl.textContent = 'Menyimpan ke Database Spreadsheet...';
                     callAPI('registerFace', {
-                        data: JSON.stringify({
-                            studentId: id,
-                            faceDescriptor: Array.from(d.descriptor),
-                            fotoURL: uploadedImgData
-                        })
+                        studentId: id,
+                        faceDescriptor: Array.from(d.descriptor),
+                        fotoURL: uploadedImgData
                     }, function(r){
                         stopRegCam();
                         closeModal();
@@ -336,7 +334,7 @@ function saveRegisteredFace(id) {
                 } else {
                     if(statusEl) {
                         statusEl.className = 'face-status error';
-                        statusEl.textContent = 'Wajah tidak terdeteksi dalam foto. Pastikan pencahayaan cukup dan wajah menghadap depan!';
+                        statusEl.textContent = 'Wajah tidak terdeteksi. Pastikan pencahayaan cukup dan menghadap depan!';
                     }
                     if(saveBtn) saveBtn.disabled = false;
                 }
@@ -535,16 +533,14 @@ function processDirectFace() {
 function submitAttendanceRecord(student, photo, fm, lat, lng) {
     stopStudentCam();
     callAPI('recordAttendance', {
-        data: JSON.stringify({
-            studentId: student.id,
-            nama: student.nama,
-            kelas: student.kelas,
-            fotoAbsen: photo,
-            faceMatch: fm,
-            latitude: lat,
-            longitude: lng,
-            alamat: "Kawasan Sekolah SMPN 2 Kawali"
-        })
+        studentId: student.id,
+        nama: student.nama,
+        kelas: student.kelas,
+        fotoAbsen: photo,
+        faceMatch: fm,
+        latitude: lat,
+        longitude: lng,
+        alamat: "Kawasan Sekolah SMPN 2 Kawali"
     }, function(r){
         if(r.success) {
             showSuccessScreen(r.status, r.time, fm, student);
