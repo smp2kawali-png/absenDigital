@@ -3,6 +3,7 @@ var API_URL = "https://script.google.com/macros/s/AKfycbxLDE2FlCxxlaw8jl13aRJvGi
 var currentPage = 'dashboard';
 var students = [];
 var attendance = [];
+var allAttendanceReport = [];
 var stats = {};
 var rekapData = null;
 var filterKelas = 'Semua';
@@ -24,7 +25,6 @@ function callAPI(action, payload, callback) {
         .then(res => { if(callback) callback(res); })
         .catch(() => showToast('Koneksi Gagal', 'error'));
     } else {
-        // Gunakan POST untuk data besar (Register Wajah / Absensi)
         var bodyData = Object.assign({ action: action }, payload || {});
         fetch(API_URL, {
             method: 'POST',
@@ -77,7 +77,7 @@ function initAdmin() {
 
 function loadAdminData() {
     callAPI('getStats', {}, function(r){ if(r.success) stats = r.stats; renderPage(); });
-    callAPI('getAttendanceToday', {}, function(r){ if(r.success) attendance = r.attendance; renderPage(); });
+    callAPI('getAttendanceToday', {}, function(r){ if(r.success) { attendance = r.attendance; allAttendanceReport = r.attendance; } renderPage(); });
     callAPI('getStudentList', {}, function(r){ if(r.success) students = r.students; renderPage(); });
 }
 
@@ -130,34 +130,126 @@ function renderDashboard() {
     lucide.createIcons();
 }
 
+// --- LAPORAN KEHADIRAN DENGAN FITUR DOWNLOAD EXCEL ---
 function renderLaporan() {
     var c = document.getElementById('main-content');
     if(!c) return;
-    c.innerHTML = `<div class="page-header"><h1>Laporan Kehadiran</h1></div><div class="card"><div class="card-body"><table class="table"><thead><tr><th>Siswa</th><th>Kelas</th><th>Tanggal</th><th>Jam Masuk</th><th>Status</th></tr></thead><tbody id="lap-table"></tbody></table></div></div>`;
+    c.innerHTML = `
+        <div class="page-header">
+            <h1>Laporan Kehadiran</h1>
+            <div class="header-actions">
+                <button class="btn btn-success" onclick="exportExcelLaporan()"><i data-lucide="download" style="width:16px"></i> Download Excel</button>
+            </div>
+        </div>
+        <div class="card"><div class="card-body">
+            <table class="table">
+                <thead><tr><th>Siswa</th><th>Kelas</th><th>Tanggal</th><th>Jam Masuk</th><th>Status</th></tr></thead>
+                <tbody id="lap-table"></tbody>
+            </table>
+        </div></div>
+    `;
     var tb = document.getElementById('lap-table');
     var h = '';
-    attendance.forEach(a => {
+    allAttendanceReport.forEach(a => {
         h += `<tr><td>${a.nama}</td><td>${a.kelas}</td><td>${a.tanggal}</td><td>${a.waktu}</td><td><span class="badge badge-success">${a.status}</span></td></tr>`;
     });
     tb.innerHTML = h || '<tr><td colspan="5" style="text-align:center">Tidak ada data</td></tr>';
     lucide.createIcons();
 }
 
+function exportExcelLaporan() {
+    if(allAttendanceReport.length === 0) { showToast('Tidak ada data untuk diunduh', 'error'); return; }
+    var wb = XLSX.utils.book_new();
+    var data = [['No', 'Nama', 'Kelas', 'Tanggal', 'Waktu', 'Status']];
+    allAttendanceReport.forEach((a, i) => {
+        data.push([i+1, a.nama, a.kelas, a.tanggal, a.waktu, a.status]);
+    });
+    var ws = XLSX.utils.aoa_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Laporan Kehadiran');
+    XLSX.writeFile(wb, 'Laporan_Kehadiran_SMPN2Kawali.xlsx');
+    showToast('Laporan berhasil diunduh!', 'success');
+}
+
+// --- REKAP BULANAN DENGAN FILTER RENTANG TANGGAL & DOWNLOAD ---
 function renderRekap() {
     var c = document.getElementById('main-content');
     if(!c) return;
-    c.innerHTML = `<div class="page-header"><h1>Rekap Bulanan</h1></div><div class="card"><div class="card-body" id="rekap-content">Memuat rekap...</div></div>`;
-    callAPI('getMonthlyRecap', {month: new Date().getMonth()+1, year: new Date().getFullYear()}, function(r){
+    var now = new Date();
+    var m = now.getMonth() + 1;
+    var y = now.getFullYear();
+    
+    c.innerHTML = `
+        <div class="page-header">
+            <h1>Rekap Bulanan</h1>
+            <div class="header-actions" style="gap:15px;align-items:flex-end">
+                <div class="form-group" style="margin-bottom:0"><label style="font-size:11px">Dari Tanggal</label><input type="date" id="rekap-start" class="form-input" value="${y}-${String(m).padStart(2,'0')}-01"></div>
+                <div class="form-group" style="margin-bottom:0"><label style="font-size:11px">Sampai Tanggal</label><input type="date" id="rekap-end" class="form-input" value="${y}-${String(m).padStart(2,'0')}-${new Date(y,m,0).getDate()}"></div>
+                <button class="btn btn-primary" onclick="loadFilteredRekap()"><i data-lucide="filter" style="width:16px"></i> Filter</button>
+                <button class="btn btn-success" onclick="exportExcelRekap()"><i data-lucide="download" style="width:16px"></i> Download Excel</button>
+            </div>
+        </div>
+        <div class="card"><div class="card-body" id="rekap-content">Memuat rekap...</div></div>
+    `;
+    lucide.createIcons();
+    loadFilteredRekap();
+}
+
+function loadFilteredRekap() {
+    var startStr = document.getElementById('rekap-start').value;
+    var endStr = document.getElementById('rekap-end').value;
+    var dStart = new Date(startStr);
+    var dEnd = new Date(endStr);
+    var m = dStart.getMonth() + 1;
+    var y = dStart.getFullYear();
+
+    callAPI('getMonthlyRecap', {month: m, year: y}, function(r){
         if(r.success) {
             rekapData = r;
             var rc = document.getElementById('rekap-content');
-            var h = `<table class="table"><thead><tr><th>Siswa</th><th>Kelas</th><th>H</th><th>T</th><th>S</th><th>I</th><th>A</th></tr></thead><tbody>`;
+            var h = `<div style="overflow-x:auto"><table class="table"><thead><tr><th>Siswa</th><th>Kelas</th>`;
+            
+            for(var d = 1; d <= r.daysInMonth; d++) {
+                var curDate = new Date(y, m - 1, d);
+                if(curDate >= dStart && curDate <= dEnd) {
+                    h += `<th>${d}</th>`;
+                }
+            }
+            h += `<th>H</th><th>T</th><th>S</th><th>I</th><th>A</th></tr></thead><tbody>`;
+            
             r.students.forEach(s => {
-                h += `<tr><td>${s.nama}</td><td>${s.kelas}</td><td>${s.totals.H}</td><td>${s.totals.T}</td><td>${s.totals.S}</td><td>${s.totals.I}</td><td>${s.totals.A}</td></tr>`;
+                h += `<tr><td>${s.nama}</td><td>${s.kelas}</td>`;
+                var countH = 0, countT = 0, countS = 0, countI = 0, countA = 0;
+                for(var d = 1; d <= r.daysInMonth; d++) {
+                    var curDate = new Date(y, m - 1, d);
+                    if(curDate >= dStart && curDate <= dEnd) {
+                        var code = s.days[d] || '-';
+                        h += `<td>${code}</td>`;
+                        if(code === 'H') countH++;
+                        if(code === 'T') countT++;
+                        if(code === 'S') countS++;
+                        if(code === 'I') countI++;
+                        if(code === 'A') countA++;
+                    }
+                }
+                h += `<td><b>${countH}</b></td><td><b>${countT}</b></td><td><b>${countS}</b></td><td><b>${countI}</b></td><td><b>${countA}</b></td></tr>`;
             });
-            rc.innerHTML = h + `</tbody></table>`;
+            rc.innerHTML = h + `</tbody></table></div>`;
+            lucide.createIcons();
         }
     });
+}
+
+function exportExcelRekap() {
+    if(!rekapData) { showToast('Data rekap belum tersedia', 'error'); return; }
+    var wb = XLSX.utils.book_new();
+    var data = [['No', 'Nama', 'Kelas', 'Hadir', 'Terlambat', 'Sakit', 'Izin', 'Alpha']];
+    rekapData.students.forEach((s, i) => {
+        data.push([i+1, s.nama, s.kelas, s.totals.H, s.totals.T, s.totals.S, s.totals.I, s.totals.A]);
+    });
+    var ws = XLSX.utils.aoa_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, 'Rekap Bulanan');
+    XLSX.writeFile(wb, 'Rekap_Bulanan_SMPN2Kawali.xlsx');
+    showToast('Rekap bulanan berhasil diunduh!', 'success');
 }
 
 function renderSiswa() {
@@ -490,6 +582,7 @@ function processDirectFace() {
         callAPI('getStudentList', {}, function(res) {
             if(!res.success || res.students.length === 0) {
                 showToast('Database siswa kosong', 'error');
+                if(btnEl) btnEl.disabled = false;
                 return;
             }
 
@@ -522,11 +615,17 @@ function processDirectFace() {
             } else {
                 if(statusEl) {
                     statusEl.className = 'face-status error';
-                    statusEl.textContent = 'Wajah tidak dikenali dalam sistem!';
+                    statusEl.textContent = 'Wajah tidak dikenali! Pastikan sudah Register Wajah di Admin.';
                 }
                 if(btnEl) btnEl.disabled = false;
             }
         });
+    }).catch(err => {
+        if(statusEl) {
+            statusEl.className = 'face-status error';
+            statusEl.textContent = 'Error deteksi: ' + err.message;
+        }
+        if(btnEl) btnEl.disabled = false;
     });
 }
 
