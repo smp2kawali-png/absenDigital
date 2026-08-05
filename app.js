@@ -8,6 +8,8 @@ var rekapData = null;
 var filterKelas = 'Semua';
 var colors = ['blue','green','orange','purple','cyan'];
 var listKelasSMP2 = ['VII A', 'VII B', 'VIII A', 'VIII B', 'VIII C', 'IX A', 'IX B', 'IX C'];
+var regStream = null;
+var uploadedImgData = null;
 
 function callAPI(action, payload, callback) {
     var url = new URL(API_URL);
@@ -25,26 +27,18 @@ function callAPI(action, payload, callback) {
 
     fetch(url.toString(), { method: 'GET', mode: 'cors' })
     .then(res => res.json())
-    .then(res => { 
-        if(callback) callback(res); 
-    })
+    .then(res => { if(callback) callback(res); })
     .catch(() => {
         fetch(url.toString(), { method: 'GET', mode: 'no-cors' }).then(() => {
             if(callback) callback({ success: true });
-        }).catch(err => {
-            console.error(err);
-        });
+        }).catch(err => console.error(err));
     });
 }
 
 document.addEventListener('DOMContentLoaded', function(){
     var urlParams = new URLSearchParams(window.location.search);
     var pageParam = urlParams.get('page') || 'student';
-    if(pageParam === 'admin') {
-        initAdmin();
-    } else {
-        initStudent();
-    }
+    if(pageParam === 'admin') { initAdmin(); } else { initStudent(); }
 });
 
 // ================= RENDER ADMIN =================
@@ -168,11 +162,11 @@ function renderRekap() {
 function renderSiswa() {
     var c = document.getElementById('main-content');
     if(!c) return;
-    c.innerHTML = `<div class="page-header"><h1>Daftar Siswa</h1><div class="header-actions"><button class="btn btn-primary" onclick="showAddModal()">Tambah Siswa</button></div></div><div class="card"><div class="card-body" style="padding:0"><table class="table"><thead><tr><th>Nama</th><th>Barcode</th><th>Kelas</th><th>Wajah</th><th>Aksi</th></tr></thead><tbody id="siswa-table"></tbody></table></div></div>`;
+    c.innerHTML = `<div class="page-header"><h1>Daftar Siswa</h1><div class="header-actions"><button class="btn btn-primary" onclick="showAddModal()">Tambah Siswa</button></div></div><div class="card"><div class="card-body" style="padding:0"><table class="table"><thead><tr><th>Nama</th><th>Barcode</th><th>Kelas</th><th>Status Wajah</th><th>Aksi</th></tr></thead><tbody id="siswa-table"></tbody></table></div></div>`;
     var tb = document.getElementById('siswa-table');
     var h = '';
     students.forEach((s) => {
-        var fb = s.hasFace ? '<span class="badge badge-success">Terdaftar</span>' : `<button class="btn btn-outline" onclick="regFace('${s.id}','${s.nama}')">Register</button>`;
+        var fb = s.hasFace ? '<span class="badge badge-success"><i data-lucide="check-circle" style="width:14px;height:14px;vertical-align:middle"></i> Terverifikasi</span>' : `<button class="btn btn-outline" style="padding:4px 10px;font-size:12px" onclick="regFace('${s.id}','${s.nama}')"><i data-lucide="camera" style="width:14px;height:14px;vertical-align:middle"></i> Register</button>`;
         h += `<tr><td>${s.nama}</td><td>${s.barcode}</td><td>${s.kelas}</td><td>${fb}</td><td><button class="btn btn-danger" style="padding:4px 8px" onclick="deleteSiswa('${s.id}')">Hapus</button></td></tr>`;
     });
     tb.innerHTML = h || '<tr><td colspan="5" style="text-align:center">Belum ada siswa</td></tr>';
@@ -209,108 +203,165 @@ function deleteSiswa(id) {
     }
 }
 
+// --- FITUR REGISTER WAJAH DENGAN KAMERA LANGSUNG & UPLOAD + TOMBOL SIMPAN ---
 function regFace(id, nm) {
+    uploadedImgData = null;
     var m = document.getElementById('modal');
     if(!m) return;
     m.innerHTML = `
-        <div class="modal">
-            <div class="modal-header"><span>Register Wajah - ${nm}</span><button class="modal-close" onclick="closeModal()">&times;</button></div>
+        <div class="modal" style="max-width:500px">
+            <div class="modal-header"><span>Register Wajah - ${nm}</span><button class="modal-close" onclick="closeModal(); stopRegCam();">&times;</button></div>
             <div class="modal-body">
-                <div style="text-align:center;padding:20px;border:2px dashed var(--border);border-radius:12px;margin-bottom:15px;cursor:pointer" onclick="document.getElementById('foto-input').click()">
-                    <i data-lucide="upload" style="width:48px;height:48px;color:var(--gray);margin-bottom:10px"></i>
-                    <p style="color:var(--gray);font-size:13px">Klik untuk upload foto wajah</p>
-                    <input type="file" id="foto-input" accept="image/*" style="display:none" onchange="previewFoto(this, '${id}')">
+                <div class="camera-box" style="margin-bottom:10px">
+                    <video id="reg-video" class="camera-video" autoplay playsinline style="height:220px"></video>
                 </div>
-                <div id="preview-box" style="display:none;margin-bottom:15px;text-align:center">
-                    <img id="preview-img" style="width:100%;max-height:200px;object-fit:contain;border-radius:8px">
+                <div style="display:flex;gap:10px;margin-bottom:15px">
+                    <button class="btn btn-primary" style="flex:1" onclick="captureRegCam()"><i data-lucide="camera" style="width:16px"></i> Ambil dari Kamera</button>
+                    <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('reg-file-in').click()"><i data-lucide="upload" style="width:16px"></i> Upload Foto</button>
+                    <input type="file" id="reg-file-in" accept="image/*" style="display:none" onchange="previewRegFile(this)">
                 </div>
-                <div class="face-status loading" id="face-status" style="display:none">Memproses wajah...</div>
+                <div id="reg-preview-box" style="text-align:center;display:none;margin-bottom:15px">
+                    <p style="font-size:12px;color:var(--gray);margin-bottom:5px">Preview Foto:</p>
+                    <img id="reg-preview-img" style="max-height:150px;border-radius:8px;object-fit:contain">
+                </div>
+                <div class="face-status loading" id="reg-status" style="display:none">Memproses wajah...</div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-outline" onclick="closeModal()">Batal</button>
-                <button class="btn btn-primary" id="save-btn" disabled onclick="executeRegisterFace('${id}')">Simpan Wajah</button>
+                <button class="btn btn-outline" onclick="closeModal(); stopRegCam();">Batal</button>
+                <button class="btn btn-success" id="reg-save-btn" disabled onclick="saveRegisteredFace('${id}')"><i data-lucide="save" style="width:16px"></i> Simpan Wajah</button>
             </div>
-        </div>`;
+        </div>
+    `;
     m.classList.add('active');
     lucide.createIcons();
+    startRegCam();
 }
 
-var uploadedImg = null;
-function previewFoto(input, id) {
+function startRegCam() {
+    navigator.mediaDevices.getUserMedia({video: {facingMode:'user', width:640, height:480}}).then(stream => {
+        regStream = stream;
+        var v = document.getElementById('reg-video');
+        if(v) v.srcObject = stream;
+    }).catch(() => {
+        showToast('Kamera tidak dapat diakses', 'error');
+    });
+}
+
+function stopRegCam() {
+    if(regStream) {
+        regStream.getTracks().forEach(t => t.stop());
+        regStream = null;
+    }
+}
+
+function captureRegCam() {
+    var v = document.getElementById('reg-video');
+    if(!v) return;
+    var cv = document.createElement('canvas');
+    cv.width = v.videoWidth || 640;
+    cv.height = v.videoHeight || 480;
+    cv.getContext('2d').drawImage(v, 0, 0);
+    uploadedImgData = cv.toDataURL('image/jpeg', 0.5);
+    
+    var prev = document.getElementById('reg-preview-box');
+    var prevImg = document.getElementById('reg-preview-img');
+    if(prev && prevImg) {
+        prev.style.display = 'block';
+        prevImg.src = uploadedImgData;
+    }
+    var saveBtn = document.getElementById('reg-save-btn');
+    if(saveBtn) saveBtn.disabled = false;
+    showToast('Foto berhasil diambil dari kamera', 'success');
+}
+
+function previewRegFile(input) {
     if(input.files && input.files[0]) {
         var reader = new FileReader();
         reader.onload = function(e) {
-            uploadedImg = new Image();
-            uploadedImg.onload = function() {
-                var prevBox = document.getElementById('preview-box');
-                var prevImg = document.getElementById('preview-img');
-                var saveBtn = document.getElementById('save-btn');
-                if(prevBox) prevBox.style.display = 'block';
-                if(prevImg) prevImg.src = e.target.result;
-                if(saveBtn) saveBtn.disabled = false;
-            };
-            uploadedImg.src = e.target.result;
+            uploadedImgData = e.target.result;
+            var prev = document.getElementById('reg-preview-box');
+            var prevImg = document.getElementById('reg-preview-img');
+            if(prev && prevImg) {
+                prev.style.display = 'block';
+                prevImg.src = uploadedImgData;
+            }
+            var saveBtn = document.getElementById('reg-save-btn');
+            if(saveBtn) saveBtn.disabled = false;
         };
         reader.readAsDataURL(input.files[0]);
     }
 }
 
-function executeRegisterFace(id) {
-    if(!uploadedImg) { showToast('Pilih foto dulu', 'error'); return; }
-    var statusEl = document.getElementById('face-status');
-    var saveBtn = document.getElementById('save-btn');
+function saveRegisteredFace(id) {
+    if(!uploadedImgData) {
+        showToast('Ambil atau upload foto terlebih dahulu', 'error');
+        return;
+    }
+
+    var statusEl = document.getElementById('reg-status');
+    var saveBtn = document.getElementById('reg-save-btn');
     if(statusEl) {
         statusEl.style.display = 'block';
         statusEl.className = 'face-status loading';
-        statusEl.textContent = 'Mendeteksi wajah...';
+        statusEl.textContent = 'Mendeteksi fitur wajah dengan AI...';
     }
     if(saveBtn) saveBtn.disabled = true;
 
-    var cv = document.createElement('canvas');
-    cv.width = uploadedImg.width;
-    cv.height = uploadedImg.height;
-    cv.getContext('2d').drawImage(uploadedImg, 0, 0);
-
-    Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model'),
-        faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model'),
-        faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model')
-    ]).then(() => {
-        faceapi.detectSingleFace(cv, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor().then(d => {
-            if(d) {
-                var desc = Array.from(d.descriptor);
-                var small = document.createElement('canvas');
-                small.width = 200; small.height = 200;
-                small.getContext('2d').drawImage(uploadedImg, 0, 0, 200, 200);
-                var url = small.toDataURL('image/jpeg', 0.3);
-                
-                if(statusEl) statusEl.textContent = 'Menyimpan...';
-                callAPI('registerFace', {data: JSON.stringify({studentId: id, faceDescriptor: desc, fotoURL: url})}, function(r){
-                    closeModal();
-                    if(r.success) { showToast('Wajah berhasil didaftarkan!', 'success'); loadAdminData(); }
-                    else { showToast('Gagal menyimpan', 'error'); }
-                });
-            } else {
+    var img = new Image();
+    img.onload = function() {
+        Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model'),
+            faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model'),
+            faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model')
+        ]).then(() => {
+            faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor().then(d => {
+                if(d) {
+                    if(statusEl) statusEl.textContent = 'Menyimpan ke Database...';
+                    callAPI('registerFace', {
+                        data: JSON.stringify({
+                            studentId: id,
+                            faceDescriptor: Array.from(d.descriptor),
+                            fotoURL: uploadedImgData
+                        })
+                    }, function(r){
+                        stopRegCam();
+                        closeModal();
+                        if(r.success) {
+                            showToast('Wajah berhasil didaftarkan!', 'success');
+                            loadAdminData();
+                        } else {
+                            showToast('Gagal menyimpan ke server', 'error');
+                        }
+                    });
+                } else {
+                    if(statusEl) {
+                        statusEl.className = 'face-status error';
+                        statusEl.textContent = 'Wajah tidak terdeteksi dalam foto. Pastikan pencahayaan cukup dan wajah menghadap depan!';
+                    }
+                    if(saveBtn) saveBtn.disabled = false;
+                }
+            }).catch(err => {
                 if(statusEl) {
                     statusEl.className = 'face-status error';
-                    statusEl.textContent = 'Wajah tidak terdeteksi dalam foto';
+                    statusEl.textContent = 'Error AI: ' + err.message;
                 }
                 if(saveBtn) saveBtn.disabled = false;
-            }
-        }).catch(e => {
+            });
+        }).catch(() => {
             if(statusEl) {
                 statusEl.className = 'face-status error';
-                statusEl.textContent = 'Error deteksi: ' + e.message;
+                statusEl.textContent = 'Gagal memuat model face-api';
             }
             if(saveBtn) saveBtn.disabled = false;
         });
-    });
+    };
+    img.src = uploadedImgData;
 }
 
 function closeModal() { 
+    stopRegCam();
     var m = document.getElementById('modal');
     if(m) m.classList.remove('active'); 
-    uploadedImg = null;
 }
 
 function saveSettings() {
