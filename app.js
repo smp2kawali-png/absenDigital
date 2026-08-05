@@ -9,21 +9,37 @@ var filterKelas = 'Semua';
 var colors = ['blue','green','orange','purple','cyan'];
 var listKelasSMP2 = ['VII A', 'VII B', 'VIII A', 'VIII B', 'VIII C', 'IX A', 'IX B', 'IX C'];
 
-// Helper API Request ke GAS dengan penanganan error koneksi
+// Helper API Request menggunakan JSONP agar bebas dari CORS & Redirect
 function callAPI(action, payload, callback) {
-    var data = Object.assign({ action: action }, payload || {});
-    fetch(API_URL, {
-        method: 'POST',
-        body: JSON.stringify(data)
-    })
-    .then(res => res.json())
-    .then(res => { 
-        if(callback) callback(res); 
-    })
-    .catch(err => { 
-        console.error(err); 
-        showToast('Koneksi Gagal ke Server', 'error'); 
-    });
+    var callbackName = 'jsonp_cb_' + Math.round(100000 * Math.random());
+    var url = new URL(API_URL);
+    url.searchParams.append('action', action);
+    url.searchParams.append('callback', callbackName);
+    
+    if(payload) {
+        for(var key in payload) {
+            if(typeof payload[key] === 'object') {
+                url.searchParams.append(key, JSON.stringify(payload[key]));
+            } else {
+                url.searchParams.append(key, payload[key]);
+            }
+        }
+    }
+
+    window[callbackName] = function(data) {
+        delete window[callbackName];
+        document.body.removeChild(script);
+        if(callback) callback(data);
+    };
+
+    var script = document.createElement('script');
+    script.src = url.toString();
+    script.onerror = function() {
+        delete window[callbackName];
+        if(script.parentNode) script.parentNode.removeChild(script);
+        showToast('Koneksi Gagal ke Server', 'error');
+    };
+    document.body.appendChild(script);
 }
 
 document.addEventListener('DOMContentLoaded', function(){
@@ -218,7 +234,7 @@ function processRegFace(id, input) {
                 ]).then(() => {
                     faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor().then(d => {
                         if(d) {
-                            callAPI('registerFace', {studentId: id, faceDescriptor: Array.from(d.descriptor), fotoURL: e.target.result}, function(r){
+                            callAPI('registerFace', {data: JSON.stringify({studentId: id, faceDescriptor: Array.from(d.descriptor), fotoURL: e.target.result})}, function(r){
                                 if(r.success) { showToast('Wajah berhasil didaftarkan!', 'success'); closeModal(); loadAdminData(); }
                             });
                         } else { showToast('Wajah tidak terdeteksi', 'error'); }
@@ -239,9 +255,8 @@ function closeModal() {
 function saveSettings() {
     var jamInput = document.getElementById('set-jam');
     if(!jamInput) return;
-    callAPI('updateSettings', {settings:{jamTerlambat: jamInput.value}}, function(r){ if(r.success) showToast('Tersimpan', 'success'); });
+    callAPI('updateSettings', {settings: JSON.stringify({jamTerlambat: jamInput.value})}, function(r){ if(r.success) showToast('Tersimpan', 'success'); });
 }
-
 
 // ================= RENDER STUDENT / ABSENSI =================
 function initStudent() {
@@ -283,7 +298,6 @@ function showStudentOptions() {
     lucide.createIcons();
 }
 
-// --- FITUR UTAMA: SCAN WAJAH LANGSUNG TANPA BARCODE ---
 function startDirectFaceAttendance() {
     var c = document.getElementById('student-content');
     if(!c) return;
@@ -409,14 +423,16 @@ function processDirectFace() {
 function submitAttendanceRecord(student, photo, fm, lat, lng) {
     stopStudentCam();
     callAPI('recordAttendance', {
-        studentId: student.id,
-        nama: student.nama,
-        kelas: student.kelas,
-        fotoAbsen: photo,
-        faceMatch: fm,
-        latitude: lat,
-        longitude: lng,
-        alamat: "Kawasan Sekolah SMPN 2 Kawali"
+        data: JSON.stringify({
+            studentId: student.id,
+            nama: student.nama,
+            kelas: student.kelas,
+            fotoAbsen: photo,
+            faceMatch: fm,
+            latitude: lat,
+            longitude: lng,
+            alamat: "Kawasan Sekolah SMPN 2 Kawali"
+        })
     }, function(r){
         if(r.success) {
             showSuccessScreen(r.status, r.time, fm, student);
